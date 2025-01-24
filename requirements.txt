@@ -2,6 +2,5 @@ streamlit==1.22.0
 opencv-python-headless==4.7.0.72  # Используется версия без графического интерфейса
 Pillow==9.5.0
 ultralytics==8.0.0
-numpy==1.23.5
 requests==2.28.1
 torch>=1.12.0
