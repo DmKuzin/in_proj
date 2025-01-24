@@ -1,69 +1,82 @@
 import streamlit as st
-import requests
-import json
+from pathlib import Path
+import PIL
+from ultralytics import YOLO
+
+# Setting page layout
+st.set_page_config(
+    page_icon=":red_car:",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# Introduction
+st.title("IN - match 3 solver")
+
+# Title
 
 
-# Функция для выполнения POST-запроса
-def send_post_request(data):
-    url = "http://91.197.98.134:5000/get-next-move"
-    headers = {"Content-Type": "application/json"}
+# Sidebar
+st.sidebar.header("Model Configuration")
 
-    # Отправка POST-запроса
-    response = requests.post(url, headers=headers, json=data)
+# Model Options
+model_type = st.sidebar.radio(
+    "--------", ['Object Detection'])
 
-    # Обработка ответа
-    if response.status_code == 200:
-        return response.json()
+confidence = float(st.sidebar.slider(
+    "Select Model Confidence", 25, 100, 40)) / 100
+
+if model_type == 'Object Detection':
+    model_path = Path('model/yolov8n.pt')
+
+# Load Pre-trained ML Model
+try:
+    model = YOLO(model_path)
+except Exception as ex:
+    st.error(f"Unable to load model. Check the specified path: {model_path}")
+    st.error(ex)
+
+source_img = None
+source_img = st.sidebar.file_uploader(
+    "Choose an image...", type=("jpg", "jpeg", "png", 'bmp', 'webp'))
+
+col1, col2 = st.columns(2)
+
+with col1:
+    try:
+        if source_img is None:
+            default_image_path = str('def_image/def_image.jpg')
+            default_image = PIL.Image.open(default_image_path)
+            st.image(default_image_path, caption="Default Image",
+                     use_column_width=True)
+        else:
+            uploaded_image = PIL.Image.open(source_img)
+            st.image(source_img, caption="Uploaded Image",
+                     use_column_width=True)
+    except Exception as ex:
+        st.error("Error occurred while opening the image.")
+        st.error(ex)
+
+with col2:
+    if source_img is None:
+
+        default_detected_image_path = str('def_image/def_image.jpg')
+        default_detected_image = PIL.Image.open(
+            default_detected_image_path)
+        st.image(default_detected_image_path, caption='Detected Image',
+                 use_column_width=True)
     else:
-        return {"error": f"Ошибка {response.status_code}: {response.text}"}
-
-
-# Основная часть Streamlit приложения
-def main():
-    st.title("Тестовый запрос с использованием POST")
-
-    # Ввод данных для запроса через интерфейс Streamlit
-    api_key = st.text_input("Введите API ключ", "f91d8f74-61f3-4d3b-9b95-e4268d0e9f4e")
-    grid = st.text_area("Введите грид (в формате JSON)", '''
-    [
-        ["b", "b", "r", "p", "y", "g"],
-        ["y", "g", "b", "r", "p", "y"],
-        ["b", "r", "p", "y", "g", "b"],
-        ["r", "p", "y", "g", "b", "r"],
-        ["p", "y", "g", "b", "r", "p"],
-        ["y", "g", "b", "r", "p", "y"]
-    ]
-    ''')
-    mode = st.selectbox("Выберите режим", ["gather", "fight", "other"])
-    is_easy_fight = st.checkbox("Легкая битва", value=True)
-
-    # Когда пользователь нажимает кнопку
-    if st.button("Отправить запрос"):
-        try:
-            # Преобразуем введенный грид в список
-            grid_data = json.loads(grid)
-
-            # Подготовка данных для запроса
-            data = {
-                "api_key": api_key,
-                "grid": grid_data,
-                "mode": mode,
-                "is_easy_fight": is_easy_fight
-            }
-
-            # Отправка POST-запроса
-            result = send_post_request(data)
-
-            # Показать результат
-            st.subheader("Ответ от сервера:")
-            st.json(result)
-
-        except json.JSONDecodeError:
-            st.error("Ошибка в формате JSON для грида.")
-        except Exception as e:
-            st.error(f"Произошла ошибка: {e}")
-
-
-if __name__ == "__main__":
-    main()
-
+        if st.sidebar.button('Detect Objects'):
+            res = model.predict(uploaded_image,
+                                conf=confidence
+                                )
+            boxes = res[0].boxes
+            res_plotted = res[0].plot()[:, :, ::-1]
+            st.image(res_plotted, caption='Detected Image',
+                     use_column_width=True)
+            try:
+                with st.expander("Detection Results"):
+                    for box in boxes:
+                        st.write(box.data)
+            except Exception as ex:
+                st.write("No image is uploaded yet!")
